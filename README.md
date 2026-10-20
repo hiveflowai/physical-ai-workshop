@@ -7,7 +7,8 @@ flow de [Hiveflow](https://hiveflow.ai), y un flow coordinador junta lo que ven 
 si hay que avisar a una persona.
 
 ```
-ESP32 + cámara ──foto──> Hiveflow ──> flow "Vigía" (Claude describe) ──reporte──> flow "Enjambre" ──> alerta
+ESP32 + cámara ──foto──> Hiveflow ──> flow "Vigía" (Claude describe) ──reporte──┐
+Teléfono ──foto por chat──> flow "Cámara virtual" (Claude describe) ──reporte──┴──> flow "Enjambre" ──> alerta
 ```
 
 ---
@@ -42,6 +43,18 @@ Tiempo total: unos 10 minutos. Necesitas un teléfono y la placa de tu mesa.
 12. Pon algo frente a la cámara (una tarjeta, tu mano) y déjalo quieto un segundo.
 13. En Hiveflow, abre la ejecución de tu flow Vigía: ahí está el reporte de Claude.
 
+### ¿Sin placa? Cámara virtual
+
+Si no te tocó placa, tu teléfono hace de cámara:
+
+1. Haz los pasos 1 y 2.
+2. En **Plantillas**, busca **"Cámara virtual"** y usa **Cámara virtual · Vigía por chat**.
+3. Pon el flow en **▶ play**. Abre el nodo **Foto por chat**, publica el chat y abre su enlace en tu teléfono.
+4. Escribe tu nombre, adjunta una foto y envía.
+
+Claude describe la foto en el mismo formato del Vigía y el reporte llega al mismo Enjambre que las placas.
+Lo ves en la ejecución de tu flow.
+
 ### Si algo sale mal
 
 | LED | Qué significa | Qué hacer |
@@ -69,6 +82,7 @@ Tiempo total: unos 10 minutos. Necesitas un teléfono y la placa de tu mesa.
 |---|---|---|
 | **Placa** (`firmware/hive-node`) | ESP32-S3 | Detecta cambios de escena, manda la foto a `POST /api/hardware/events` con tu API key. Sirve su propia página de configuración |
 | **Vigía con cámara · ESP32** | Plantilla pública de Hiveflow | Nodo Hardware (Nodo cámara, Cambio de escena) → Claude describe la foto en formato fijo → reporte al Enjambre |
+| **Cámara virtual · Vigía por chat** | Plantilla pública de Hiveflow | Chat input (foto desde el teléfono) → el mismo Claude vigía → reporte al Enjambre. Para quien no tiene placa |
 | **Enjambre · coordinador** | Flow del organizador | Guarda cada reporte. Si trae riesgo, Claude revisa los recientes de todos los nodos y, si hay alerta, manda un correo |
 
 La placa **no ejecuta a Claude**: solo ve y manda. La visión y las decisiones ocurren en Hiveflow.
