@@ -1,0 +1,119 @@
+<!doctype html><html lang=es><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Conectar nodo</title>
+<style>
+:root{--bg:#0B0A12;--panel:#171421;--rule:#2a2440;--ink:#ECE9F5;--soft:#A49DBD;--faint:#6E6787;--violet:#9B7BFF;--v2:#7951EE;--green:#4ADE80;--amber:#F0B254;--red:#FF5C7A}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+main{max-width:520px;margin:0 auto;padding:28px 16px 40px}
+h1{font-size:20px;margin:0 0 4px;letter-spacing:.04em}p.sub{color:var(--soft);margin:0 0 22px}
+.step{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:16px;margin-bottom:12px;opacity:.45;pointer-events:none;transition:.2s}
+.step.on{opacity:1;pointer-events:auto}.step.done{opacity:.8;pointer-events:auto}
+.step h2{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--violet);margin:0 0 10px}
+button{font:inherit;border-radius:999px;border:1px solid var(--v2);background:var(--v2);color:#fff;padding:9px 18px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--rule)}button:disabled{opacity:.45;cursor:default}
+.nets{display:grid;gap:6px;max-height:260px;overflow:auto;margin:6px 0 12px}
+.net{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border:1px solid var(--rule);border-radius:8px;cursor:pointer}
+.net.sel{border-color:var(--violet);box-shadow:0 0 0 1px var(--violet)}.net small{color:var(--faint)}
+input{width:100%;font:inherit;background:#0f0d17;color:var(--ink);border:1px solid var(--rule);border-radius:8px;padding:10px 12px;margin:4px 0 12px}
+label{font-size:13px;color:var(--soft)}.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px}.kv dt{color:var(--faint)}.kv dd{margin:0}
+.msg{font-size:14px;margin-top:10px;min-height:20px}.ok{color:var(--green)}.warn{color:var(--amber)}.err{color:var(--red)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}a{color:var(--violet)}
+</style>
+<main>
+<h1>Conectar nodo del enjambre</h1>
+<p class=sub>Conecta la placa por USB y sigue los pasos. Funciona en Chrome o Edge.</p>
+<div id=nosupport class="step on" hidden><h2>Navegador</h2>Este navegador no puede hablar con dispositivos USB. Abre esta página en <b>Chrome</b> o <b>Edge</b>.</div>
+
+<section class="step on" id=s1><h2>1 · Placa</h2>
+<div class=row><button id=bConnect>Conectar placa</button><span class=msg id=m1></span></div>
+<dl class=kv id=info hidden></dl></section>
+
+<section class=step id=s2><h2>2 · Wifi</h2>
+<div class=row><button class=ghost id=bScan>Buscar redes</button><span class=msg id=m2></span></div>
+<div class=nets id=nets></div>
+<label for=ssid>Red</label><input id=ssid autocomplete=off placeholder="Nombre de la red">
+<label for=pass>Clave</label><input id=pass type=password autocomplete=off placeholder="Vacía si la red es abierta">
+<label for=name>Nombre del nodo</label><input id=name autocomplete=off>
+<button id=bSave>Conectar a esta red</button><div class=msg id=m3></div>
+<div class=row style="margin-top:14px"><button class=ghost id=bForget>Olvidar red guardada</button><span class=msg id=m5></span></div></section>
+
+<section class=step id=s3><h2>3 · Listo</h2><div class=msg id=m4></div></section>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+let port,reader,writer,buf='',waiters=[],GW='';
+if(!('serial' in navigator)){ $('#nosupport').hidden=false; document.querySelectorAll('section').forEach(s=>s.hidden=true); }
+fetch('/api/lan').then(r=>r.json()).then(j=>GW=j.gateway).catch(()=>{});
+const msg=(id,t,c='')=>{const e=$(id);e.textContent=t;e.className='msg '+c};
+const step=n=>['#s1','#s2','#s3'].forEach((s,i)=>{const e=$(s);e.classList.toggle('on',i===n);e.classList.toggle('done',i<n)});
+
+async function readLoop(){
+  const dec=new TextDecoderStream(); port.readable.pipeTo(dec.writable).catch(()=>{}); reader=dec.readable.getReader();
+  try{ for(;;){ const {value,done}=await reader.read(); if(done)break; buf+=value; let i;
+    while((i=buf.indexOf('\n'))>=0){ const line=buf.slice(0,i).trim(); buf=buf.slice(i+1); onLine(line); } } }catch(e){}
+}
+function onLine(line){
+  if(line.includes('waiting for download')){ resetBoard(); return; }   // quedó en bootloader al abrir el puerto
+  if(!line.startsWith('{'))return; let j; try{j=JSON.parse(line)}catch{return}
+  waiters=waiters.filter(w=>{ if(w.t===j.t || (w.t==='wifi-connected'&&j.t==='net'&&j.wifi==='connected')){w.res(j);return false} return true });
+}
+const wait=(t,ms)=>new Promise((res,rej)=>{const w={t,res};waiters.push(w);setTimeout(()=>{waiters=waiters.filter(x=>x!==w);rej(new Error('timeout'))},ms)});
+async function send(obj,want,ms=4000){ const p=want?wait(want,ms):null; const enc=new TextEncoder(); await writer.write(enc.encode(JSON.stringify(obj)+'\n')); return p; }
+async function resetBoard(){ await port.setSignals({dataTerminalReady:false,requestToSend:true}); await new Promise(r=>setTimeout(r,120)); await port.setSignals({dataTerminalReady:false,requestToSend:false}); }
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function getInfo(){ for(let i=0;i<8;i++){ try{ return await send({t:'info'},'info',1200);}catch(e){ await sleep(500);} } throw new Error('La placa no responde. ¿Tiene el firmware hive-node?'); }
+
+$('#bConnect').onclick=async()=>{
+  try{
+    port=await navigator.serial.requestPort({filters:[{usbVendorId:0x303a}]});
+    await port.open({baudRate:115200});
+    await port.setSignals({dataTerminalReady:false,requestToSend:false});
+    writer=port.writable.getWriter(); readLoop();
+    msg('#m1','Hablando con la placa…');
+    const j=await getInfo();
+    $('#info').hidden=false;
+    $('#info').innerHTML=`<dt>Nodo</dt><dd>${j.name}</dd><dt>MAC</dt><dd>${j.mac}</dd><dt>Cámara</dt><dd>${j.camera}</dd><dt>Firmware</dt><dd>${j.fw} ${j.ver}</dd><dt>Wifi</dt><dd>${j.ssid||'sin configurar'}</dd>`;
+    $('#name').value=j.name; if(j.ssid)$('#ssid').value=j.ssid;
+    msg('#m1','Placa lista','ok'); step(1); $('#bScan').click();
+  }catch(e){ msg('#m1',e.name==='NotFoundError'?'No elegiste ninguna placa.':e.message,'err'); }
+};
+
+$('#bScan').onclick=async()=>{
+  msg('#m2','Buscando…'); $('#nets').innerHTML='';
+  try{ const j=await send({t:'scan'},'scan',12000); const seen=new Set();
+    j.aps.filter(a=>a.ssid&&!seen.has(a.ssid)&&seen.add(a.ssid)).forEach(a=>{
+      const d=document.createElement('div'); d.className='net'; const bars=a.rssi>-60?'▂▄▆█':a.rssi>-70?'▂▄▆':a.rssi>-80?'▂▄':'▂';
+      d.innerHTML=`<span>${a.ssid.replace(/</g,'&lt;')}</span><small>${a.open?'abierta · ':''}${bars}</small>`;
+      d.onclick=()=>{document.querySelectorAll('.net').forEach(x=>x.classList.remove('sel'));d.classList.add('sel');$('#ssid').value=a.ssid;$('#pass').focus()};
+      $('#nets').appendChild(d); });
+    msg('#m2',seen.size+' redes');
+  }catch(e){ msg('#m2','No pude buscar redes','err'); }
+};
+
+$('#bForget').onclick=async()=>{
+  if(!confirm('¿Borrar la red y la clave guardadas en la placa? Abrirá su red Hive para configurarla de nuevo.'))return;
+  $('#bForget').disabled=true;
+  try{ await send({t:'forget'},'forget');
+    $('#ssid').value=''; $('#pass').value='';
+    const r=$('#info').querySelectorAll('dd'); if(r[4]) r[4].textContent='sin configurar';
+    msg('#m5','Red olvidada. El LED queda en violeta.','ok'); step(1);
+  }catch(e){ msg('#m5','La placa no respondió','err'); }
+  $('#bForget').disabled=false;
+};
+
+$('#bSave').onclick=async()=>{
+  const ssid=$('#ssid').value.trim(); if(!ssid){msg('#m3','Elige o escribe una red','warn');return}
+  $('#bSave').disabled=true; msg('#m3','Guardando…');
+  try{
+    if($('#name').value.trim()) await send({t:'name',v:$('#name').value.trim()},'ack');
+    if(GW) await send({t:'gateway',url:GW},'ack');
+    const conn=wait('wifi-connected',25000);
+    await send({t:'wifi',ssid,pass:$('#pass').value},'ack'); $('#pass').value='';
+    msg('#m3','Conectando a '+ssid+'… el LED parpadea en azul');
+    const j=await conn;
+    msg('#m3','Conectado','ok'); step(2);
+    $('#m4').innerHTML=`<span class=ok>El nodo está en la red con IP ${j.ip}.</span><br>En unos segundos aparece su cámara en <a href="/" target=_blank>el panel del enjambre</a>. Ya puedes desconectarlo del USB y alimentarlo donde quieras.`;
+  }catch(e){ msg('#m3','No se conectó. Revisa la clave y que la red sea de 2.4 GHz.','err'); }
+  $('#bSave').disabled=false;
+};
+</script></html>

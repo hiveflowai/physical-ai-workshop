@@ -1,0 +1,8 @@
+# 8 MB: cabe en las 6 Freenove N8R8 y en las 2 N16R8 (los 8 MB de arriba quedan libres)
+# Name,     Type, SubType,  Offset,   Size
+nvs,        data, nvs,      0x9000,   0x6000
+otadata,    data, ota,      0xf000,   0x2000
+phy_init,   data, phy,      0x11000,  0x1000
+ota_0,      app,  ota_0,    0x20000,  3M
+ota_1,      app,  ota_1,    ,         3M
+storage,    data, spiffs,   ,         0x1D0000

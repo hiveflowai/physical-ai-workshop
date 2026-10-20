@@ -1,0 +1,78 @@
+<!doctype html><html lang=es><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Nodo Hive</title>
+<style>
+:root{--bg:#0B0A12;--panel:#171421;--rule:#2a2440;--ink:#ECE9F5;--soft:#A49DBD;--faint:#6E6787;--violet:#9B7BFF;--v2:#7951EE;--green:#4ADE80;--amber:#F0B254;--red:#FF5C7A}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,sans-serif}
+main{max-width:460px;margin:0 auto;padding:20px 16px 36px}
+h1{font-size:20px;margin:0}.sub{color:var(--soft);font-size:14px;margin:2px 0 16px}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:14px;margin-bottom:12px}
+.card h2{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--violet);margin:0 0 10px}
+img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;background:#000;display:block}
+.nets{display:grid;gap:6px;max-height:240px;overflow:auto;margin-bottom:12px}
+.net{display:flex;justify-content:space-between;padding:10px 12px;border:1px solid var(--rule);border-radius:8px;cursor:pointer}
+.net.sel{border-color:var(--violet);box-shadow:0 0 0 1px var(--violet)}.net small{color:var(--faint)}
+label{font-size:13px;color:var(--soft)}input{width:100%;font:inherit;background:#0f0d17;color:var(--ink);border:1px solid var(--rule);border-radius:8px;padding:11px 12px;margin:4px 0 12px}
+button{font:inherit;width:100%;border-radius:999px;border:0;background:var(--v2);color:#fff;padding:12px}button:disabled{opacity:.5}
+.ghost{background:transparent;border:1px solid var(--rule);color:var(--ink);width:auto;padding:6px 14px;font-size:14px}
+.msg{font-size:14px;margin-top:10px}.ok{color:var(--green)}.warn{color:var(--amber)}.err{color:var(--red)}
+details{font-size:14px;color:var(--soft)}summary{cursor:pointer;margin-bottom:8px}
+.row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+</style>
+<main>
+<h1 id=title>Nodo Hive</h1><div class=sub id=sub>Cargando…</div>
+<div class=card id=where hidden style="border-color:var(--v2)"><h2>Tu placa en la red</h2>
+<div style="font-size:14px;color:var(--soft)" id=wnet></div>
+<a id=wurl style="display:block;font:600 26px ui-monospace,monospace;color:var(--ink);margin:6px 0 4px;word-break:break-all"></a>
+<div style="font-size:13px;color:var(--faint)">Ábrela desde cualquier equipo conectado a esa misma red para ver la cámara y cambiar la configuración.</div></div>
+<div class=card><h2>Cámara</h2><img id=cam alt="Vista de la cámara"></div>
+<div class=card><div class=row><h2 style="margin:0">Wifi</h2><button class=ghost id=bScan>Buscar</button></div>
+<div class=nets id=nets></div>
+<label for=ssid>Red</label><input id=ssid autocomplete=off autocapitalize=off>
+<label for=pass>Clave</label><input id=pass type=password autocomplete=off>
+<label for=name>Nombre del nodo</label><input id=name autocomplete=off autocapitalize=off>
+<details><summary>Avanzado</summary><label for=gw>Gateway del enjambre</label><input id=gw autocomplete=off autocapitalize=off placeholder="http://hive.local:8790"></details>
+<button id=bSave>Guardar y conectar</button><div class=msg id=msg></div>
+<button class=ghost id=bForget style="margin-top:12px">Olvidar red guardada</button></div>
+<div class=card><div class=row><h2 style="margin:0">HiveFlow</h2><small id=hfst style="color:var(--faint)"></small></div>
+<p style="font-size:13px;color:var(--soft);margin:0 0 10px">Pega una API key de HiveFlow con permiso de <b>ejecución</b>. La cámara manda cada cambio de escena a tus flows con un nodo Hardware "Nodo cámara".</p>
+<label for=hfkey>API key</label><input id=hfkey type=password autocomplete=off autocapitalize=off placeholder="hf_…">
+<details><summary>Avanzado</summary><label for=hfurl>Servidor</label><input id=hfurl autocomplete=off autocapitalize=off placeholder="https://api.hiveflow.ai"></details>
+<div class=row style="gap:8px"><button id=bHf style="flex:1">Guardar API key</button><button class=ghost id=bHfOff>Quitar</button></div>
+<div class=msg id=hfmsg></div></div>
+</main>
+<script>
+const $=s=>document.querySelector(s);const msg=(t,c='')=>{$('#msg').textContent=t;$('#msg').className='msg '+c};
+let camT;function cam(){clearTimeout(camT);const i=new Image();i.onload=()=>{$('#cam').src=i.src;camT=setTimeout(cam,400)};i.onerror=()=>camT=setTimeout(cam,1500);i.src='/capture.jpg?'+Date.now()}
+const HFST={off:'sin API key',idle:'lista, esperando una escena',sending:'enviando…',ok:'última escena enviada ✓','error 401':'API key inválida','error 403':'a la key le falta el permiso de ejecución','error 404':'el servidor aún no tiene esta función','error 429':'límite alcanzado','error red':'sin internet'};
+function hfShow(h){if(!h)return;$('#hfst').textContent=(h.key?h.key+' · ':'')+(HFST[h.status]||h.status);$('#hfst').style.color=h.status==='ok'?'var(--green)':h.status.startsWith('error')?'var(--red)':'var(--faint)';if(!$('#hfurl').value&&h.url!=='https://api.hiveflow.ai')$('#hfurl').value=h.url}
+async function info(){const j=await (await fetch('/info')).json();hfShow(j.hiveflow);
+ if(j.ip){$('#where').hidden=false;$('#wnet').textContent='Conectada a '+j.ssid;$('#wurl').textContent='http://'+j.ip;$('#wurl').href='http://'+j.ip}else{$('#where').hidden=true}$('#title').textContent=j.name;
+ $('#sub').textContent=`${j.camera} · ${j.mac} · `+(j.ip?`en ${j.ssid} (${j.ip})`:(j.ssid?`buscando ${j.ssid}`:'sin wifi'));
+ if(!$('#name').value)$('#name').value=j.name;if(!$('#ssid').value)$('#ssid').value=j.ssid;if(!$('#gw').value&&j.gateway!=='http://hive.local:8790')$('#gw').value=j.gateway;return j}
+async function scan(){$('#nets').innerHTML='<small style="color:var(--faint)">Buscando redes…</small>';
+ try{const j=await (await fetch('/api/scan')).json();const seen=new Set();$('#nets').innerHTML='';
+ j.aps.filter(a=>a.ssid&&!seen.has(a.ssid)&&seen.add(a.ssid)).forEach(a=>{const d=document.createElement('div');d.className='net';
+  const bars=a.rssi>-60?'▂▄▆█':a.rssi>-70?'▂▄▆':a.rssi>-80?'▂▄':'▂';d.innerHTML='<span></span><small></small>';
+  d.firstChild.textContent=a.ssid;d.lastChild.textContent=(a.open?'abierta · ':'')+bars;
+  d.onclick=()=>{document.querySelectorAll('.net').forEach(x=>x.classList.remove('sel'));d.classList.add('sel');$('#ssid').value=a.ssid;$('#pass').focus()};
+  $('#nets').appendChild(d)})}catch(e){$('#nets').innerHTML=''}}
+$('#bScan').onclick=scan;
+$('#bSave').onclick=async()=>{const ssid=$('#ssid').value.trim();if(!ssid)return msg('Elige una red','warn');
+ $('#bSave').disabled=true;msg('Guardando…');
+ const body={ssid,pass:$('#pass').value,name:$('#name').value.trim()};if($('#gw').value.trim())body.gateway=$('#gw').value.trim();
+ try{await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});$('#pass').value='';
+  msg('Conectando a '+ssid+'…');
+  for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,1000));try{const j=await info();if(j.ip){msg(`Conectado a ${ssid} con IP ${j.ip}. Esta red temporal se apaga en unos segundos; el LED queda en verde.`,'ok');$('#bSave').disabled=false;return}}catch(e){}}
+  msg('Si tu teléfono se salió de esta red, revisa el LED de la placa: verde es que ya se conectó. Si sigue en violeta, la clave no funcionó: vuelve a entrar y repite.','warn');
+ }catch(e){msg('Perdí la conexión con la placa. Mira el LED: verde = conectado, violeta = repetir.','warn')}
+ $('#bSave').disabled=false};
+$('#bForget').onclick=async()=>{if(!confirm('¿Borrar la red y la clave guardadas? La placa abrirá su red Hive para configurarla de nuevo.'))return;
+ try{await fetch('/api/forget',{method:'POST'});$('#ssid').value='';msg('Red olvidada. La placa abre su red Hive en unos segundos; el LED queda violeta.','ok')}catch(e){msg('No pude hablar con la placa','err')}};
+async function saveHf(key){const body={hiveflowKey:key};const u=$('#hfurl').value.trim();body.hiveflowUrl=u;
+ try{await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});$('#hfkey').value='';
+ $('#hfmsg').textContent=key?'Guardada. Mueve algo frente a la cámara para mandar la primera escena.':'API key quitada.';$('#hfmsg').className='msg ok';await info()}catch(e){$('#hfmsg').textContent='No pude hablar con la placa';$('#hfmsg').className='msg err'}}
+$('#bHf').onclick=()=>{const k=$('#hfkey').value.trim();if(!k.startsWith('hf_')){$('#hfmsg').textContent='La API key empieza con hf_';$('#hfmsg').className='msg warn';return}saveHf(k)};
+$('#bHfOff').onclick=()=>{if(confirm('¿Quitar la API key de HiveFlow de esta placa?'))saveHf('')};
+setInterval(()=>info().catch(()=>{}),4000);
+info().then(j=>{if(!j.ip||!j.ssid)scan()}).catch(()=>{});cam();
+</script></html>

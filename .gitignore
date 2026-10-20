@@ -1,0 +1,9 @@
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+__pycache__/
+*.pyc
+inventario.md
+firmware-backups/
+.DS_Store

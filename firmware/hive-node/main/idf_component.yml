@@ -1,0 +1,5 @@
+dependencies:
+  idf: ">=5.3"
+  espressif/esp32-camera: "^2.0.15"
+  espressif/led_strip: "^2.5.5"
+  espressif/mdns: "^1.4.0"
